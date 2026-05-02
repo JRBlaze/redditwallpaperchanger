@@ -13,6 +13,8 @@ A small Electron app for Windows 11 that:
 - Keeps running in the background from the Windows tray after closing or minimizing
 - Includes app icon files in `assets/` for the window, tray, and future packaging
 
+![App Screenshot](RWCScreenshot.png)
+
 ## Notes
 
 - The first refresh runs when the app starts and sets the first matching image.
