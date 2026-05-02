@@ -13,37 +13,6 @@ A small Electron app for Windows 11 that:
 - Keeps running in the background from the Windows tray after closing or minimizing
 - Includes app icon files in `assets/` for the window, tray, and future packaging
 
-## Run
-
-```powershell
-npm install
-npm start
-```
-
-The app changes the Windows wallpaper through `SystemParametersInfo` via PowerShell. It does not require a Reddit API key.
-
-## Build a Windows installer
-
-To build the installer locally on Windows:
-
-```powershell
-npm install
-npm run dist:win
-```
-
-The installer is written to `dist/` as `Reddit Wallpaper Changer Setup 1.0.0.exe`.
-
-## GitHub release build
-
-After uploading this project to GitHub, create a version tag to build the Windows installer in GitHub Actions:
-
-```powershell
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-The workflow in `.github/workflows/release.yml` attaches the `.exe` installer to a GitHub Release and also keeps it as a workflow artifact. To publish a new version later, update the `version` in `package.json`, commit it, then push a matching tag such as `v1.0.1`.
-
 ## Notes
 
 - The first refresh runs when the app starts and sets the first matching image.
