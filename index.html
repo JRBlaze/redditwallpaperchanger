@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' https: data:; style-src 'self'; script-src 'self'; connect-src 'none';"
+    />
+    <title>Reddit Wallpaper Changer</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero-panel">
+        <div>
+          <p class="label">r/wallpaper</p>
+          <h1>Reddit Wallpaper Changer</h1>
+          <p class="lede">
+            Pull matching wallpaper image posts, set the first match as your Windows 11
+            desktop background, and keep favorites in your own folder.
+          </p>
+        </div>
+        <div class="actions">
+          <button class="primary" id="setNewestButton" type="button">Set first match now</button>
+          <button class="secondary" id="refreshButton" type="button">Refresh list</button>
+        </div>
+      </section>
+
+      <section class="control-strip" aria-label="Wallpaper settings">
+        <label class="field">
+          <span>Refresh options every</span>
+          <span class="inline-input">
+            <input id="refreshIntervalInput" type="number" min="1" step="0.25" value="24" />
+            <span>hours</span>
+          </span>
+        </label>
+
+        <label class="field">
+          <span>Change background every</span>
+          <span class="inline-input">
+            <input id="changeIntervalInput" type="number" min="1" step="0.25" value="24" />
+            <span>hours</span>
+          </span>
+        </label>
+
+        <label class="field">
+          <span>Reddit sort</span>
+          <select id="redditSortSelect">
+            <option value="best">Best</option>
+            <option value="hot">Hot</option>
+            <option value="new">New</option>
+            <option value="top">Top</option>
+            <option value="rising">Rising</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Resolution</span>
+          <select id="resolutionSelect">
+            <option value="any">Any resolution</option>
+            <option value="current">Current screen</option>
+            <option value="1920x1080">1920 x 1080</option>
+            <option value="2560x1440">2560 x 1440</option>
+            <option value="3440x1440">3440 x 1440</option>
+            <option value="3840x2160">3840 x 2160</option>
+          </select>
+        </label>
+
+        <div class="folder-control">
+          <span>Favorites folder</span>
+          <strong id="favoriteFolder">No folder selected</strong>
+        </div>
+
+        <button class="secondary" id="chooseFolderButton" type="button">Choose folder</button>
+        <button class="icon-button" id="openFolderButton" type="button" title="Open favorites folder">
+          Open
+        </button>
+      </section>
+
+      <section class="status-bar" id="statusBar" role="status">Ready</section>
+
+      <section class="wallpaper-grid" id="wallpaperGrid" aria-label="Wallpapers"></section>
+    </main>
+
+    <template id="wallpaperCardTemplate">
+      <article class="wallpaper-card">
+        <button class="image-button" type="button">
+          <img alt="" loading="lazy" />
+        </button>
+        <div class="card-body">
+          <div class="title-row">
+            <h2></h2>
+            <span class="current-pill">Current</span>
+          </div>
+          <p class="meta"></p>
+          <div class="card-actions">
+            <button class="small primary set-button" type="button">Set</button>
+            <button class="small secondary favorite-button" type="button">Favorite</button>
+            <button class="small link-button source-button" type="button">Source</button>
+          </div>
+        </div>
+      </article>
+    </template>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
