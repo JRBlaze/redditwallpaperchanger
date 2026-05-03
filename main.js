@@ -18,6 +18,7 @@ const RESOLUTION_OPTIONS = new Set([
 const DEFAULT_SETTINGS = {
   refreshIntervalHours: 24,
   changeIntervalHours: 24,
+  startOnStartup: false,
   redditSort: 'new',
   resolution: 'any',
   favoriteFolder: '',
@@ -151,10 +152,20 @@ function normalizeSettings(nextSettings) {
     ...cleanSettings,
     refreshIntervalHours: normalizeIntervalHours(refreshIntervalHours, legacyIntervalHours),
     changeIntervalHours: normalizeIntervalHours(changeIntervalHours, legacyIntervalHours),
+    startOnStartup: Boolean(nextSettings.startOnStartup),
     redditSort,
     resolution,
     favoriteIds: Array.isArray(nextSettings.favoriteIds) ? nextSettings.favoriteIds : []
   };
+}
+
+function applyStartOnStartupSetting() {
+  if (process.platform !== 'win32') return;
+  app.setLoginItemSettings({
+    openAtLogin: Boolean(settings.startOnStartup),
+    path: process.execPath,
+    args: []
+  });
 }
 
 function normalizeIntervalHours(value, fallbackValue = 24) {
@@ -503,11 +514,21 @@ async function updateSettings(nextSettings) {
     ...nextSettings
   });
   await saveSettings();
+  if (Object.hasOwn(nextSettings, 'startOnStartup')) {
+    applyStartOnStartupSetting();
+  }
   scheduleTimers();
   if (Object.hasOwn(nextSettings, 'refreshIntervalHours')) {
     setStatus(`Wallpaper options refresh every ${settings.refreshIntervalHours} hours.`, 'success');
   } else if (Object.hasOwn(nextSettings, 'changeIntervalHours')) {
     setStatus(`Desktop background changes every ${settings.changeIntervalHours} hours.`, 'success');
+  } else if (Object.hasOwn(nextSettings, 'startOnStartup')) {
+    setStatus(
+      settings.startOnStartup
+        ? 'App will start automatically when you sign in to Windows.'
+        : 'App will no longer start automatically when you sign in to Windows.',
+      'success'
+    );
   } else {
     setStatus('Wallpaper filters updated.', 'success');
   }
@@ -554,6 +575,7 @@ function createWindow() {
 app.whenReady().then(async () => {
   app.setAppUserModelId('com.local.reddit-wallpaper-changer');
   await loadSettings();
+  applyStartOnStartupSetting();
   createTray();
   createWindow();
   scheduleTimers();

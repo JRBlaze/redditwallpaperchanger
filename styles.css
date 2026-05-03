@@ -141,6 +141,20 @@ h1 {
   font-weight: 750;
 }
 
+.checkbox-field span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1f2523;
+  font-size: 14px;
+}
+
+.checkbox-field input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+}
+
 .inline-input {
   display: flex;
   align-items: center;
