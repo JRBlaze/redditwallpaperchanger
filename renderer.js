@@ -5,6 +5,7 @@ const refreshIntervalInput = document.querySelector('#refreshIntervalInput');
 const changeIntervalInput = document.querySelector('#changeIntervalInput');
 const redditSortSelect = document.querySelector('#redditSortSelect');
 const resolutionSelect = document.querySelector('#resolutionSelect');
+const startOnStartupInput = document.querySelector('#startOnStartupInput');
 const favoriteFolder = document.querySelector('#favoriteFolder');
 const refreshButton = document.querySelector('#refreshButton');
 const setNewestButton = document.querySelector('#setNewestButton');
@@ -30,6 +31,7 @@ function setBusy(isBusy) {
   changeIntervalInput.disabled = isBusy;
   redditSortSelect.disabled = isBusy;
   resolutionSelect.disabled = isBusy;
+  startOnStartupInput.disabled = isBusy;
 }
 
 function renderStatus(status) {
@@ -43,6 +45,8 @@ function renderSettings(settings) {
   changeIntervalInput.value = settings.changeIntervalHours || 24;
   redditSortSelect.value = settings.redditSort || 'new';
   resolutionSelect.value = settings.resolution || 'any';
+  startOnStartupInput.checked = Boolean(settings.startOnStartup);
+  startOnStartupInput.disabled = appState?.platform !== 'win32';
   favoriteFolder.textContent = settings.favoriteFolder || 'No folder selected';
   favoriteFolder.title = settings.favoriteFolder || '';
   openFolderButton.disabled = !settings.favoriteFolder;
@@ -179,6 +183,10 @@ resolutionSelect.addEventListener('change', () => {
     await window.wallpaperApp.updateSettings({ resolution: resolutionSelect.value });
     return window.wallpaperApp.refresh();
   });
+});
+
+startOnStartupInput.addEventListener('change', () => {
+  run(() => window.wallpaperApp.updateSettings({ startOnStartup: startOnStartupInput.checked }));
 });
 
 window.wallpaperApp.onStateUpdate(render);

@@ -9,6 +9,7 @@ A small Electron app for Windows 11 that:
 - Refreshes the 10 wallpaper options on a configurable interval, defaulting to every 24 hours
 - Changes your desktop background through the loaded wallpaper options on a separate configurable interval, defaulting to every 24 hours
 - Prevents either interval from being set below 1 hour
+- Can optionally start automatically when you sign in to Windows
 - Lets you favorite any shown wallpaper into a folder you choose
 - Keeps running in the background from the Windows tray after closing or minimizing
 - Includes app icon files in `assets/` for the window, tray, and future packaging
