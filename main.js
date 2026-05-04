@@ -41,6 +41,14 @@ let status = {
   updatedAt: ''
 };
 
+function isLaunchAtLogin() {
+  if (process.platform !== 'win32' && process.platform !== 'darwin') return false;
+  const loginItemSettings = app.getLoginItemSettings();
+  if (Boolean(loginItemSettings.wasOpenedAtLogin)) return true;
+
+  return process.argv.some((arg) => arg === '--startup' || arg === '--hidden');
+}
+
 function userDataPath(...parts) {
   return path.join(app.getPath('userData'), ...parts);
 }
@@ -537,12 +545,13 @@ async function updateSettings(nextSettings) {
 }
 
 function createWindow() {
+  const showOnLaunch = !isSmokeTest && !(settings.startOnStartup && isLaunchAtLogin());
   mainWindow = new BrowserWindow({
     width: 1180,
     height: 820,
     minWidth: 920,
     minHeight: 680,
-    show: !isSmokeTest,
+    show: showOnLaunch,
     backgroundColor: '#f7f4ee',
     title: 'Reddit Wallpaper Changer',
     icon: getAppIconPath(),
