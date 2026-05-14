@@ -3,9 +3,10 @@ const path = require('path');
 const fs = require('fs/promises');
 const { existsSync } = require('fs');
 const { execFile } = require('child_process');
+const { pathToFileURL } = require('url');
 
 const REDDIT_BASE_URL = 'https://www.reddit.com/r/wallpaper';
-const USER_AGENT = 'Windows11RedditWallpaperChanger/1.0 (+https://www.reddit.com/r/wallpaper/)';
+const USER_AGENT = 'RedditWallpaperChanger/1.0 (+https://www.reddit.com/r/wallpaper/)';
 const REDDIT_SORT_OPTIONS = new Set(['best', 'hot', 'new', 'top', 'rising']);
 const RESOLUTION_OPTIONS = new Set([
   'any',
@@ -41,12 +42,12 @@ let status = {
   updatedAt: ''
 };
 
-function isLaunchAtLogin() {
+function wasStartedHidden() {
+  if (process.argv.some((arg) => arg === '--startup' || arg === '--hidden')) return true;
+
   if (process.platform !== 'win32' && process.platform !== 'darwin') return false;
   const loginItemSettings = app.getLoginItemSettings();
-  if (Boolean(loginItemSettings.wasOpenedAtLogin)) return true;
-
-  return process.argv.some((arg) => arg === '--startup' || arg === '--hidden');
+  return Boolean(loginItemSettings.wasOpenedAtLogin);
 }
 
 function userDataPath(...parts) {
@@ -70,6 +71,10 @@ function getAppIconPath() {
 }
 
 function showMainWindow() {
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.show();
+  }
+
   if (!mainWindow || mainWindow.isDestroyed()) {
     createWindow();
   }
@@ -167,12 +172,50 @@ function normalizeSettings(nextSettings) {
   };
 }
 
-function applyStartOnStartupSetting() {
-  if (process.platform !== 'win32') return;
+function quoteDesktopExecArg(value) {
+  return `"${String(value).replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
+}
+
+function linuxAutostartPath() {
+  return path.join(app.getPath('home'), '.config', 'autostart', 'reddit-wallpaper-changer.desktop');
+}
+
+async function applyLinuxStartOnStartupSetting() {
+  const autostartPath = linuxAutostartPath();
+
+  if (!settings.startOnStartup) {
+    await fs.rm(autostartPath, { force: true });
+    return;
+  }
+
+  await fs.mkdir(path.dirname(autostartPath), { recursive: true });
+  const desktopEntry = [
+    '[Desktop Entry]',
+    'Type=Application',
+    'Version=1.0',
+    'Name=Reddit Wallpaper Changer',
+    'Comment=Change the desktop wallpaper from r/wallpaper',
+    `Exec=${quoteDesktopExecArg(process.execPath)} --hidden`,
+    `Icon=${getAppIconPath()}`,
+    'Terminal=false',
+    'Categories=Utility;',
+    'X-GNOME-Autostart-enabled=true'
+  ].join('\n');
+  await fs.writeFile(autostartPath, `${desktopEntry}\n`, 'utf8');
+}
+
+async function applyStartOnStartupSetting() {
+  if (process.platform === 'linux') {
+    await applyLinuxStartOnStartupSetting();
+    return;
+  }
+
+  if (process.platform !== 'win32' && process.platform !== 'darwin') return;
   app.setLoginItemSettings({
     openAtLogin: Boolean(settings.startOnStartup),
+    openAsHidden: true,
     path: process.execPath,
-    args: []
+    args: ['--hidden']
   });
 }
 
@@ -389,6 +432,33 @@ async function downloadWallpaper(wallpaper) {
   return filePath;
 }
 
+function runCommand(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    execFile(command, args, options, (error, stdout, stderr) => {
+      if (error) {
+        reject(new Error(stderr.trim() || stdout.trim() || error.message));
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
+  });
+}
+
+async function runFirstSuccessful(commands) {
+  const errors = [];
+
+  for (const command of commands) {
+    try {
+      await command.run();
+      return command.label;
+    } catch (error) {
+      errors.push(`${command.label}: ${error.message}`);
+    }
+  }
+
+  throw new Error(`No supported wallpaper setter worked. Tried ${errors.join('; ')}`);
+}
+
 function setWindowsWallpaper(filePath) {
   return new Promise((resolve, reject) => {
     const script = `
@@ -429,6 +499,121 @@ if (-not $ok) {
   });
 }
 
+function setMacOSWallpaper(filePath) {
+  const script = `
+tell application "System Events"
+  repeat with currentDesktop in desktops
+    set picture of currentDesktop to POSIX file "${filePath.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"
+  end repeat
+end tell
+`;
+
+  return runCommand('osascript', ['-e', script]);
+}
+
+function gsettingsCommand(schema, key, value) {
+  return {
+    label: `gsettings ${schema} ${key}`,
+    run: () => runCommand('gsettings', ['set', schema, key, value])
+  };
+}
+
+function gnomeWallpaperCommand(fileUri) {
+  return {
+    label: 'gsettings GNOME wallpaper',
+    run: async () => {
+      await runCommand('gsettings', ['set', 'org.gnome.desktop.background', 'picture-uri', fileUri]);
+      await runCommand('gsettings', [
+        'set',
+        'org.gnome.desktop.background',
+        'picture-uri-dark',
+        fileUri
+      ]).catch(() => undefined);
+    }
+  };
+}
+
+function kdeWallpaperCommand(command, fileUri) {
+  const script = `
+const wallpaper = ${JSON.stringify(fileUri)};
+for (const desktop of desktops()) {
+  desktop.wallpaperPlugin = 'org.kde.image';
+  desktop.currentConfigGroup = ['Wallpaper', 'org.kde.image', 'General'];
+  desktop.writeConfig('Image', wallpaper);
+}
+`;
+
+  return {
+    label: `${command} KDE Plasma wallpaper`,
+    run: () => runCommand(command, [
+      'org.kde.plasmashell',
+      '/PlasmaShell',
+      'org.kde.PlasmaShell.evaluateScript',
+      script
+    ])
+  };
+}
+
+async function setXfceWallpaper(filePath) {
+  const { stdout } = await runCommand('xfconf-query', ['-c', 'xfce4-desktop', '-l']);
+  const imageProperties = stdout
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.endsWith('/last-image'));
+
+  if (!imageProperties.length) {
+    throw new Error('No XFCE desktop wallpaper properties were found.');
+  }
+
+  for (const property of imageProperties) {
+    await runCommand('xfconf-query', ['-c', 'xfce4-desktop', '-p', property, '-s', filePath]);
+  }
+}
+
+async function setLinuxWallpaper(filePath) {
+  const fileUri = pathToFileURL(filePath).toString();
+  const commands = [
+    gnomeWallpaperCommand(fileUri),
+    gsettingsCommand('org.cinnamon.desktop.background', 'picture-uri', fileUri),
+    gsettingsCommand('org.mate.background', 'picture-filename', filePath),
+    kdeWallpaperCommand('qdbus6', fileUri),
+    kdeWallpaperCommand('qdbus', fileUri),
+    {
+      label: 'xfconf-query XFCE wallpaper',
+      run: () => setXfceWallpaper(filePath)
+    },
+    {
+      label: 'pcmanfm wallpaper',
+      run: () => runCommand('pcmanfm', ['--set-wallpaper', filePath])
+    },
+    {
+      label: 'pcmanfm-qt wallpaper',
+      run: () => runCommand('pcmanfm-qt', ['--set-wallpaper', filePath])
+    }
+  ];
+
+  return runFirstSuccessful(commands);
+}
+
+async function setDesktopWallpaper(filePath) {
+  if (process.platform === 'win32') {
+    await setWindowsWallpaper(filePath);
+    return 'Windows desktop background';
+  }
+
+  if (process.platform === 'darwin') {
+    await setMacOSWallpaper(filePath);
+    return 'macOS desktop picture';
+  }
+
+  if (process.platform === 'linux') {
+    const setter = await setLinuxWallpaper(filePath);
+    return `Linux desktop background (${setter})`;
+  }
+
+  throw new Error(`Wallpaper changing is not supported on ${process.platform}.`);
+}
+
 async function setWallpaperById(id) {
   const wallpaper = wallpapers.find((item) => item.id === id);
   if (!wallpaper) {
@@ -438,15 +623,11 @@ async function setWallpaperById(id) {
   setStatus(`Downloading "${wallpaper.title}"...`, 'loading');
   const filePath = await downloadWallpaper(wallpaper);
 
-  if (process.platform !== 'win32') {
-    throw new Error('Wallpaper changing is only supported on Windows in this app.');
-  }
-
-  setStatus('Setting the Windows desktop background...', 'loading');
-  await setWindowsWallpaper(filePath);
+  setStatus('Setting the desktop background...', 'loading');
+  const desktopLabel = await setDesktopWallpaper(filePath);
   settings.currentWallpaperId = wallpaper.id;
   await saveSettings();
-  setStatus(`Desktop background set to "${wallpaper.title}".`, 'success');
+  setStatus(`${desktopLabel} set to "${wallpaper.title}".`, 'success');
   sendState();
   return getPublicState();
 }
@@ -523,7 +704,7 @@ async function updateSettings(nextSettings) {
   });
   await saveSettings();
   if (Object.hasOwn(nextSettings, 'startOnStartup')) {
-    applyStartOnStartupSetting();
+    await applyStartOnStartupSetting();
   }
   scheduleTimers();
   if (Object.hasOwn(nextSettings, 'refreshIntervalHours')) {
@@ -533,8 +714,8 @@ async function updateSettings(nextSettings) {
   } else if (Object.hasOwn(nextSettings, 'startOnStartup')) {
     setStatus(
       settings.startOnStartup
-        ? 'App will start automatically when you sign in to Windows.'
-        : 'App will no longer start automatically when you sign in to Windows.',
+        ? 'App will start automatically and stay hidden in the tray when you sign in.'
+        : 'App will no longer start automatically when you sign in.',
       'success'
     );
   } else {
@@ -545,7 +726,7 @@ async function updateSettings(nextSettings) {
 }
 
 function createWindow() {
-  const showOnLaunch = !isSmokeTest && !(settings.startOnStartup && isLaunchAtLogin());
+  const showOnLaunch = !isSmokeTest && !wasStartedHidden();
   mainWindow = new BrowserWindow({
     width: 1180,
     height: 820,
@@ -584,7 +765,10 @@ function createWindow() {
 app.whenReady().then(async () => {
   app.setAppUserModelId('com.local.reddit-wallpaper-changer');
   await loadSettings();
-  applyStartOnStartupSetting();
+  await applyStartOnStartupSetting();
+  if (process.platform === 'darwin' && app.dock && wasStartedHidden()) {
+    app.dock.hide();
+  }
   createTray();
   createWindow();
   scheduleTimers();
