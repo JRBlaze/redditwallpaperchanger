@@ -1,19 +1,26 @@
 {
   "name": "reddit-wallpaper-changer",
   "version": "1.0.2",
-  "description": "Windows 11 desktop wallpaper changer for the newest wallpapers from r/wallpaper.",
+  "description": "Cross-platform desktop wallpaper changer for the newest wallpapers from r/wallpaper.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "check": "node --check main.js && node --check preload.js && node --check renderer.js",
     "dist": "electron-builder",
-    "dist:win": "electron-builder --win nsis --publish never"
+    "dist:win": "electron-builder --win nsis --publish never",
+    "dist:linux": "electron-builder --linux AppImage deb pacman --publish never",
+    "dist:mac": "electron-builder --mac dmg zip --publish never",
+    "dist:all": "electron-builder --win nsis --linux AppImage deb pacman --mac dmg zip --publish never"
   },
   "keywords": [
     "electron",
     "reddit",
     "wallpaper",
-    "windows"
+    "windows",
+    "linux",
+    "macos",
+    "debian",
+    "arch"
   ],
   "author": "",
   "license": "MIT",
@@ -50,10 +57,79 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Reddit Wallpaper Changer",
       "artifactName": "${productName} Setup ${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "assets/app-icon.png",
+      "category": "public.app-category.utilities"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "pacman",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/app-icon.png",
+      "category": "Utility",
+      "maintainer": "Reddit Wallpaper Changer contributors",
+      "synopsis": "Reddit wallpaper changer",
+      "description": "Desktop wallpaper changer for Reddit r/wallpaper with tray support.",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    },
+    "deb": {
+      "depends": [
+        "gsettings-desktop-schemas",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils"
+      ]
+    },
+    "pacman": {
+      "depends": [
+        "gsettings-desktop-schemas",
+        "libnotify",
+        "nss",
+        "libxss",
+        "libxtst",
+        "xdg-utils"
+      ]
     }
   },
   "devDependencies": {
     "electron": "^41.5.0",
     "electron-builder": "^26.8.1"
-  }
+  },
+  "homepage": "https://github.com/reddit-wallpaper-changer/reddit-wallpaper-changer"
 }
