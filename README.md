@@ -21,7 +21,7 @@ A small cross-platform Electron app for Windows, Linux, and macOS that:
 Wallpaper changing is supported on:
 
 - **Windows** through the native `SystemParametersInfo` API.
-- **Linux** through common desktop-environment tools available on Arch Linux and Debian Linux, including GNOME/GSettings, Cinnamon, MATE, KDE Plasma (`qdbus6`/`qdbus`), XFCE (`xfconf-query`), and PCManFM/PCManFM-Qt.
+- **Linux** through common desktop-environment tools available on Arch Linux and Debian Linux, including GNOME/GSettings, Cinnamon, MATE, KDE Plasma (`qdbus6`/`qdbus`, with `gdbus`/`busctl` fallbacks), XFCE (`xfconf-query`), and PCManFM/PCManFM-Qt.
 - **macOS** through AppleScript/System Events.
 
 Startup behavior is also platform-aware:
@@ -50,6 +50,8 @@ npm run dist:mac
 Linux builds produce AppImage, Debian (`.deb`), and Arch Linux (`.pacman`) packages. macOS builds produce DMG and ZIP packages. Windows builds produce an NSIS installer.
 
 ## Notes
+
+- On Linux, the app detects your current desktop environment before trying wallpaper setters. This prevents KDE Plasma systems (including Arch-based distributions such as CachyOS) from reporting success through GNOME/GSettings commands that do not actually change the Plasma wallpaper.
 
 - The first refresh runs when the app starts and sets the first matching image.
 - Closing or minimizing the window hides it to the tray/menu bar so scheduled wallpaper refreshes and background changes continue. Use the tray/menu bar icon to reopen the window or quit the app.
