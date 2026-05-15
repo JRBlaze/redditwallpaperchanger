@@ -511,9 +511,10 @@ end tell
   return runCommand('osascript', ['-e', script]);
 }
 
-function gsettingsCommand(schema, key, value) {
+function gsettingsCommand(schema, key, value, desktop) {
   return {
     label: `gsettings ${schema} ${key}`,
+    desktop,
     run: () => runCommand('gsettings', ['set', schema, key, value])
   };
 }
@@ -521,6 +522,7 @@ function gsettingsCommand(schema, key, value) {
 function gnomeWallpaperCommand(fileUri) {
   return {
     label: 'gsettings GNOME wallpaper',
+    desktop: 'gnome',
     run: async () => {
       await runCommand('gsettings', ['set', 'org.gnome.desktop.background', 'picture-uri', fileUri]);
       await runCommand('gsettings', [
@@ -533,8 +535,8 @@ function gnomeWallpaperCommand(fileUri) {
   };
 }
 
-function kdeWallpaperCommand(command, fileUri) {
-  const script = `
+function kdeWallpaperScript(fileUri) {
+  return `
 const wallpaper = ${JSON.stringify(fileUri)};
 for (const desktop of desktops()) {
   desktop.wallpaperPlugin = 'org.kde.image';
@@ -542,13 +544,51 @@ for (const desktop of desktops()) {
   desktop.writeConfig('Image', wallpaper);
 }
 `;
+}
 
+function kdeQdbusWallpaperCommand(command, script) {
   return {
     label: `${command} KDE Plasma wallpaper`,
+    desktop: 'kde',
     run: () => runCommand(command, [
       'org.kde.plasmashell',
       '/PlasmaShell',
       'org.kde.PlasmaShell.evaluateScript',
+      script
+    ])
+  };
+}
+
+function kdeGdbusWallpaperCommand(script) {
+  return {
+    label: 'gdbus KDE Plasma wallpaper',
+    desktop: 'kde',
+    run: () => runCommand('gdbus', [
+      'call',
+      '--session',
+      '--dest',
+      'org.kde.plasmashell',
+      '--object-path',
+      '/PlasmaShell',
+      '--method',
+      'org.kde.PlasmaShell.evaluateScript',
+      script
+    ])
+  };
+}
+
+function kdeBusctlWallpaperCommand(script) {
+  return {
+    label: 'busctl KDE Plasma wallpaper',
+    desktop: 'kde',
+    run: () => runCommand('busctl', [
+      '--user',
+      'call',
+      'org.kde.plasmashell',
+      '/PlasmaShell',
+      'org.kde.PlasmaShell',
+      'evaluateScript',
+      's',
       script
     ])
   };
@@ -570,27 +610,69 @@ async function setXfceWallpaper(filePath) {
   }
 }
 
+function getLinuxDesktopNames() {
+  const desktopNames = [
+    process.env.XDG_CURRENT_DESKTOP,
+    process.env.DESKTOP_SESSION,
+    process.env.GDMSESSION
+  ]
+    .filter(Boolean)
+    .flatMap((value) => String(value).split(':'))
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (process.env.KDE_FULL_SESSION === 'true') desktopNames.push('kde');
+  return [...new Set(desktopNames)];
+}
+
+function commandDesktopPriority(command, desktopNames) {
+  const desktop = command.desktop;
+  if (!desktop) return 50;
+  if (desktopNames.includes(desktop)) return 0;
+  if (desktopNames.some((name) => name.includes(desktop))) return 0;
+  if (desktop === 'kde' && desktopNames.some((name) => name.includes('plasma'))) return 0;
+  return 100;
+}
+
+function sortLinuxWallpaperCommands(commands) {
+  const desktopNames = getLinuxDesktopNames();
+  return commands
+    .map((command, index) => ({ command, index }))
+    .sort((a, b) => {
+      const priorityDifference = commandDesktopPriority(a.command, desktopNames)
+        - commandDesktopPriority(b.command, desktopNames);
+      return priorityDifference || a.index - b.index;
+    })
+    .map(({ command }) => command);
+}
+
 async function setLinuxWallpaper(filePath) {
   const fileUri = pathToFileURL(filePath).toString();
-  const commands = [
+  const kdeScript = kdeWallpaperScript(fileUri);
+  const commands = sortLinuxWallpaperCommands([
     gnomeWallpaperCommand(fileUri),
-    gsettingsCommand('org.cinnamon.desktop.background', 'picture-uri', fileUri),
-    gsettingsCommand('org.mate.background', 'picture-filename', filePath),
-    kdeWallpaperCommand('qdbus6', fileUri),
-    kdeWallpaperCommand('qdbus', fileUri),
+    gsettingsCommand('org.cinnamon.desktop.background', 'picture-uri', fileUri, 'cinnamon'),
+    gsettingsCommand('org.mate.background', 'picture-filename', filePath, 'mate'),
+    kdeQdbusWallpaperCommand('qdbus6', kdeScript),
+    kdeQdbusWallpaperCommand('qdbus', kdeScript),
+    kdeGdbusWallpaperCommand(kdeScript),
+    kdeBusctlWallpaperCommand(kdeScript),
     {
       label: 'xfconf-query XFCE wallpaper',
+      desktop: 'xfce',
       run: () => setXfceWallpaper(filePath)
     },
     {
       label: 'pcmanfm wallpaper',
+      desktop: 'lxde',
       run: () => runCommand('pcmanfm', ['--set-wallpaper', filePath])
     },
     {
       label: 'pcmanfm-qt wallpaper',
+      desktop: 'lxqt',
       run: () => runCommand('pcmanfm-qt', ['--set-wallpaper', filePath])
     }
-  ];
+  ]);
 
   return runFirstSuccessful(commands);
 }
