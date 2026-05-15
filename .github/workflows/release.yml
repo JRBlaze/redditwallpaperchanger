@@ -1,4 +1,4 @@
-name: Build Windows Installer
+name: Build Release Packages
 
 on:
   push:
@@ -10,9 +10,33 @@ permissions:
   contents: write
 
 jobs:
-  windows-installer:
-    name: Windows installer
-    runs-on: windows-latest
+  build:
+    name: Build ${{ matrix.name }} package
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            build-script: dist:win
+            artifact-name: reddit-wallpaper-changer-windows-installer
+            artifact-path: dist/*.exe
+          - name: Linux
+            os: ubuntu-latest
+            build-script: dist:linux
+            artifact-name: reddit-wallpaper-changer-linux-packages
+            artifact-path: |
+              dist/*.AppImage
+              dist/*.deb
+              dist/*.pacman
+          - name: macOS
+            os: macos-latest
+            build-script: dist:mac
+            artifact-name: reddit-wallpaper-changer-macos-packages
+            artifact-path: |
+              dist/*.dmg
+              dist/*.zip
 
     steps:
       - name: Check out repository
@@ -30,17 +54,30 @@ jobs:
       - name: Check JavaScript syntax
         run: npm run check
 
-      - name: Build installer
-        run: npm run dist:win
+      - name: Build ${{ matrix.name }} package
+        run: npm run ${{ matrix.build-script }}
 
-      - name: Upload installer artifact
+      - name: Upload ${{ matrix.name }} artifact
         uses: actions/upload-artifact@v4
         with:
-          name: reddit-wallpaper-changer-windows-installer
-          path: dist/*.exe
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-path }}
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
 
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.exe
+          files: release-artifacts/**/*
